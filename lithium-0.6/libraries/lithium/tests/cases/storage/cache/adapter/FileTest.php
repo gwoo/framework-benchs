@@ -35,7 +35,8 @@ class FileTest extends \lithium\test\Unit {
 	}
 
 	public function testEnabled() {
-		$this->assertTrue($this->File->enabled());
+		$file = $this->File;
+		$this->assertTrue($file::enabled());
 	}
 
 	public function testWrite() {
@@ -137,6 +138,18 @@ class FileTest extends \lithium\test\Unit {
 
 		$result = touch(LITHIUM_APP_PATH . "/resources/tmp/cache/empty");
 		$this->assertTrue($result);
+	}
+
+	public function testIncrement() {
+		$key = 'key_to_increment';
+		$result = $this->File->increment($key);
+		$this->assertEqual(false, $result);
+	}
+
+	public function testDecrement() {
+		$key = 'key_to_decrement';
+		$result = $this->File->decrement($key);
+		$this->assertEqual(false, $result);
 	}
 
 

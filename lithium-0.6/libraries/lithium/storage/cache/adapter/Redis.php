@@ -32,18 +32,16 @@ namespace lithium\storage\cache\adapter;
  * ));
  * }}}
  *
- * The 'server' key accepts a string argument in the format of ipaddress:port where the Redis
+ * The 'server' key accepts a string argument in the format of ip:port where the Redis
  * server can be found.
  *
  * This Redis adapter provides basic support for `write`, `read`, `delete`
  * and `clear` cache functionality, as well as allowing the first four
- * methods to be filtered as per the Lithium filtering system. Additionally,
- * This adapter defines several methods that are _not_ implemented in other
- * adapters, and are thus non-portable - see the documentation for `Cache`
- * as to how these methods should be accessed.
+ * methods to be filtered as per the Lithium filtering system.
  *
  * @see lithium\storage\Cache::key()
  * @see lithium\storage\Cache::adapter()
+ * @see http://github.com/owlient/phpredis
  *
  */
 class Redis extends \lithium\core\Object {
@@ -51,9 +49,9 @@ class Redis extends \lithium\core\Object {
 	/**
 	 * Redis object instance used by this adapter.
 	 *
-	 * @var object Memcache object
+	 * @var object Redis object
 	 */
-	protected static $_Redis = null;
+	public static $connection = null;
 
 	/**
 	 * Object constructor
@@ -73,15 +71,15 @@ class Redis extends \lithium\core\Object {
 			'server' => '127.0.0.1:6379'
 		);
 
-		if (is_null(static::$_Redis)) {
-			static::$_Redis = new \Redis();
+		if (is_null(static::$connection)) {
+			static::$connection = new \Redis();
 		}
 
 		$config += $defaults;
 		parent::__construct($config);
 
 		list($IP, $port) = explode(':', $this->_config['server']);
-		static::$_Redis->connect($IP, $port);
+		static::$connection->connect($IP, $port);
 	}
 
 	/**
@@ -93,7 +91,7 @@ class Redis extends \lithium\core\Object {
 	 */
 	protected function _ttl($key, $expiry) {
 		$expires = strtotime($expiry) - time();
-		return static::$_Redis->setTimeout($key, $expires);
+		return static::$connection->setTimeout($key, $expires);
 	}
 
 	/**
@@ -105,12 +103,11 @@ class Redis extends \lithium\core\Object {
 	 * @return boolean True on successful write, false otherwise
 	 */
 	public function write($key, $value, $expiry) {
-		$Redis =& static::$_Redis;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Redis) {
-			extract($params);
-			if($Redis->set($key, $data)){
-				return $self->invokeMethod('_ttl', array($key, $expiry));
+		return function($self, $params, $chain) use (&$connection) {
+			if($connection->set($params['key'], $params['data'])){
+				return $self->invokeMethod('_ttl', array($params['key'], $params['expiry']));
 			}
 		};
 	}
@@ -122,26 +119,24 @@ class Redis extends \lithium\core\Object {
 	 * @return mixed Cached value if successful, false otherwise
 	 */
 	public function read($key) {
-		$Redis =& static::$_Redis;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Redis) {
-			extract($params);
-			return $Redis->get($key);
+		return function($self, $params, $chain) use (&$connection) {
+			return $connection->get($params['key']);
 		};
 	}
 
 	/**
 	 * Delete value from the cache
 	 *
-	 * @param string $key        The key to uniquely identify the cached item
+	 * @param string $key The key to uniquely identify the cached item
 	 * @return mixed True on successful delete, false otherwise
 	 */
 	public function delete($key) {
-		$Redis =& static::$_Redis;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Redis) {
-			extract($params);
-			return (boolean) $Redis->delete($key);
+		return function($self, $params, $chain) use (&$connection) {
+			return (boolean) $connection->delete($params['key']);
 		};
 	}
 
@@ -153,11 +148,10 @@ class Redis extends \lithium\core\Object {
 	 * @return mixed Item's new value on successful decrement, false otherwise
 	 */
 	public function decrement($key, $offset = 1) {
-		$Redis =& static::$_Redis;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Redis, $offset) {
-			extract($params);
-			return $Redis->decr($key, $offset);
+		return function($self, $params, $chain) use (&$connection, $offset) {
+			return $connection->decr($params['key'], $offset);
 		};
 	}
 
@@ -169,11 +163,10 @@ class Redis extends \lithium\core\Object {
 	 * @return mixed Item's new value on successful increment, false otherwise
 	 */
 	public function increment($key, $offset = 1) {
-		$Redis =& static::$_Redis;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Redis, $offset) {
-			extract($params);
-			return $Redis->incr($key, $offset);
+		return function($self, $params, $chain) use (&$connection, $offset) {
+			return $connection->incr($params['key'], $offset);
 		};
 	}
 
@@ -183,20 +176,20 @@ class Redis extends \lithium\core\Object {
 	 * @return mixed True on successful clear, false otherwise
 	 */
 	public function clear() {
-		return static::$_Redis->flushdb();
+		return static::$connection->flushdb();
 	}
 
 	/**
 	 * Determines if the Redis extension has been installed and
 	 * that there is a redis-server available
 	 *
-	 * return boolean True if enabled, false otherwise
+	 * @return boolean Returns `true` if the Redis extension is enabled, `false` otherwise.
 	 */
 	public function enabled() {
 		if (!extension_loaded('redis')) {
 			return false;
 		}
-		$version = static::$_Redis->info();
+		$version = static::$connection->info();
 		return (!empty($version));
 	}
 }

@@ -34,7 +34,8 @@ class ApcTest extends \lithium\test\Unit {
 	}
 
 	public function testEnabled() {
-		$this->assertTrue($this->Apc->enabled());
+		$apc = $this->Apc;
+		$this->assertTrue($apc::enabled());
 	}
 
 	public function testSimpleWrite() {
@@ -49,13 +50,10 @@ class ApcTest extends \lithium\test\Unit {
 		$params = compact('key', 'data', 'expiry');
 		$result = $closure($this->Apc, $params, null);
 		$expected = $data;
-		$this->assertEqual($expected, $result);
+		$this->assertTrue($result);
 
 		$result = apc_fetch($key);
 		$this->assertEqual($expected, $result);
-
-		$result = apc_fetch($key . '_expires');
-		$this->assertEqual($time, $result);
 
 		$result = apc_delete($key);
 		$this->assertTrue($result);
@@ -71,28 +69,44 @@ class ApcTest extends \lithium\test\Unit {
 		$params = compact('key', 'data', 'expiry');
 		$result = $closure($this->Apc, $params, null);
 		$expected = $data;
-		$this->assertEqual($expected, $result);
+		$this->assertTrue($result);
 
 		$result = apc_fetch($key);
 		$this->assertEqual($expected, $result);
 
-		$result = apc_fetch($key . '_expires');
-		$this->assertEqual($time, $result);
-
 		$result = apc_delete($key);
 		$this->assertTrue($result);
+	}
 
-		$result = apc_delete($key . '_expires');
-		$this->assertTrue($result);
+	public function testWriteMulti() {
+		$expiry = '+1 minute';
+		$time = strtotime($expiry);
+		$key = array(
+			'key1' => 'data1',
+			'key2' => 'data2',
+			'key3' => 'data3'
+		);
+		$data = null;
+
+		$closure = $this->Apc->write($key, $data, $expiry);
+		$this->assertTrue(is_callable($closure));
+
+		$params = compact('key', 'data', 'expiry');
+		$result = $closure($this->Apc, $params, null);
+
+		$this->assertEqual(array(), $result);
+
+		$result = apc_fetch(array_keys($key));
+		$this->assertEqual($key, $result);
+
+		$result = apc_delete(array_keys($key));
+		$this->assertEqual(array(), $result);
 	}
 
 	public function testSimpleRead() {
 		$key = 'read_key';
 		$data = 'read data';
 		$time = strtotime('+1 minute');
-
-		$result = apc_store($key . '_expires', $time, 60);
-		$this->assertTrue($result);
 
 		$result = apc_store($key, $data, 60);
 		$this->assertTrue($result);
@@ -106,9 +120,6 @@ class ApcTest extends \lithium\test\Unit {
 		$this->assertEqual($expected, $result);
 
 		$result = apc_delete($key);
-		$this->assertTrue($result);
-
-		$result = apc_delete($key . '_expires');
 		$this->assertTrue($result);
 
 		$key = 'another_read_key';
@@ -118,22 +129,46 @@ class ApcTest extends \lithium\test\Unit {
 		$result = apc_store($key, $data, 60);
 		$this->assertTrue($result);
 
-		$result = apc_store($key . '_expires', $time, 60);
-		$this->assertTrue($result);
-
 		$closure = $this->Apc->read($key);
 		$this->assertTrue(is_callable($closure));
 
 		$params = compact('key');
 		$result = $closure($this->Apc, $params, null);
 		$expected = $data;
+
 		$this->assertEqual($expected, $result);
 
 		$result = apc_delete($key);
 		$this->assertTrue($result);
+	}
 
-		$result = apc_delete($key . '_expires');
-		$this->assertTrue($result);
+	public function testReadMulti() {
+		$expiry = '+1 minute';
+		$time = strtotime($expiry);
+		$key = array(
+			'key1' => 'data1',
+			'key2' => 'data2',
+			'key3' => 'data3'
+		);
+		$data = null;
+
+		$closure = $this->Apc->write($key, $data, $expiry);
+		$this->assertTrue(is_callable($closure));
+
+		$params = compact('key', 'data', 'expiry');
+		$result = $closure($this->Apc, $params, null);
+		$this->assertEqual(array(), $result);
+
+		$expected = array(
+			'key1' => 'data1',
+			'key2' => 'data2',
+			'key3' => 'data3'
+		);
+		$result = apc_fetch(array_keys($key));
+		$this->assertEqual($expected, $result);
+
+		$result = apc_delete(array_keys($key));
+		$this->assertEqual(array(), $result);
 	}
 
 	public function testReadKeyThatDoesNotExist() {
@@ -144,7 +179,6 @@ class ApcTest extends \lithium\test\Unit {
 		$params = compact('key');
 		$result = $closure($this->Apc, $params, null);
 		$this->assertFalse($result);
-
 	}
 
 	public function testDelete() {
@@ -155,18 +189,38 @@ class ApcTest extends \lithium\test\Unit {
 		$result = apc_store($key, $data, 60);
 		$this->assertTrue($result);
 
-		$result = apc_store($key . '_expires', $time, 60);
-		$this->assertTrue($result);
-
 		$closure = $this->Apc->delete($key);
 		$this->assertTrue(is_callable($closure));
 
 		$params = compact('key');
 		$result = $closure($this->Apc, $params, null);
 		$this->assertTrue($result);
+	}
 
-		$this->assertFalse(apc_delete($key));
-		$this->assertFalse(apc_delete($key . '_expires'));
+	public function testDeleteMulti() {
+		$expiry = '+1 minute';
+		$time = strtotime($expiry);
+		$key = array(
+			'key1' => 'data1',
+			'key2' => 'data2',
+			'key3' => 'data3'
+		);
+		$data = null;
+
+		$closure = $this->Apc->write($key, $data, $expiry);
+		$this->assertTrue(is_callable($closure));
+
+		$params = compact('key', 'data', 'expiry');
+		$result = $closure($this->Apc, $params, null);
+		$this->assertEqual(array(), $result);
+
+		$expected = array(
+			'key1' => 'data1',
+			'key2' => 'data2',
+			'key3' => 'data3'
+		);
+		$result = apc_delete(array_keys($key));
+		$this->assertEqual(array(), $result);
 	}
 
 	public function testDeleteNonExistentKey() {
@@ -194,13 +248,10 @@ class ApcTest extends \lithium\test\Unit {
 		$params = compact('key', 'data', 'expiry');
 		$result = $closure($this->Apc, $params, null);
 		$expected = $data;
-		$this->assertEqual($expected, $result);
+		$this->assertTrue($result);
 
 		$result = apc_fetch($key);
 		$this->assertEqual($expected, $result);
-
-		$result = apc_fetch($key . '_expires');
-		$this->assertEqual($time, $result);
 
 		$closure = $this->Apc->read($key);
 		$this->assertTrue(is_callable($closure));
@@ -216,29 +267,6 @@ class ApcTest extends \lithium\test\Unit {
 		$params = compact('key');
 		$result = $closure($this->Apc, $params, null);
 		$this->assertTrue($result);
-
-		$this->assertFalse(apc_fetch($key));
-		$this->assertFalse(apc_fetch($key . '_expires'));
-	}
-
-	public function testExpiredRead() {
-		$key = 'expiring_read_key';
-		$data = 'expired data';
-		$time = strtotime('+1 second');
-
-		$result = apc_store($key . '_expires', $time, 1);
-		$this->assertTrue($result);
-
-		$result = apc_store($key, $data, 1);
-		$this->assertTrue($result);
-
-		sleep(2);
-		$closure = $this->Apc->read($key);
-		$this->assertTrue(is_callable($closure));
-
-		$params = compact('key');
-		$result = $closure($this->Apc, $params, null);
-		$this->assertFalse($result);
 	}
 
 	public function testClear() {

@@ -22,6 +22,15 @@ class Router extends \lithium\core\StaticObject {
 		static::$_configuration = new Collection();
 	}
 
+	public static function cache($cache = null) {
+		if ($cache === false) {
+			static::$_configuration = new Collection();
+		}
+		if ($cache instanceof Collection) {
+			static::$_configuration = $cache;
+		}
+		return static::$_configuration;
+	}
 	/**
 	 * Connects a new route and returns the current routes array.
 	 *
@@ -94,11 +103,13 @@ class Router extends \lithium\core\StaticObject {
 		if (empty(static::$_configuration)) {
 			static::__init();
 		}
-		if (is_null($route)) {
+		if ($route === null) {
 			return static::$_configuration;
 		}
 		return isset(static::$_configuration[$route]) ? static::$_configuration[$route] : null;
 	}
 }
+
+Router::__init();
 
 ?>

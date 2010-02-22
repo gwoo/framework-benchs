@@ -31,11 +31,7 @@ namespace lithium\storage\cache\adapter;
  * adapters, and are thus non-portable - see the documentation for `Cache`
  * as to how these methods should be accessed.
  *
- * This adapter stores two keys for each written value - one which consists
- * of the data to be cached, and the other being a cache of the expiration time.
- * This is to unify the behavior of the APC adapter to be in line with the other
- * adapters, since APC cache expirations are only evaluated on requests subsequent
- * to their initial storage.
+ * This adapter supports multi-key `write`, `read` and `delete` operations.
  *
  * Learn more about APC in the [PHP APC manual](http://php.net/manual/en/book.apc.php).
  *
@@ -55,51 +51,58 @@ class Apc extends \lithium\core\Object {
 	}
 
 	/**
-	 * Write value(s) to the cache
+	 * Write value(s) to the cache.
 	 *
-	 * @param string $key The key to uniquely identify the cached item
-	 * @param mixed $data The value to be cached
-	 * @param string $expiry A strtotime() compatible cache time
-	 * @return boolean True on successful write, false otherwise
+	 * This adapter method supports multi-key write. By specifying `$key` as an
+	 * associative array of key/value pairs, `$data` is ignored and all keys that
+	 * are cached will receive an expiration time of `$expiry`.
+	 *
+	 * @param string|array $key The key to uniquely identify the cached item.
+	 * @param mixed $data The value to be cached.
+	 * @param string $expiry A strtotime() compatible cache time.
+	 * @return boolean True on successful write, false otherwise.
 	 */
 	public function write($key, $data, $expiry) {
 		return function($self, $params, $chain) {
-			extract($params);
-			$cachetime = strtotime($expiry);
-			$duration = $cachetime - time();
+			$cachetime = strtotime($params['expiry']);
+			$key = $params['key'];
 
-			apc_store($key . '_expires', $cachetime, $duration);
-			return apc_store($key, $data, $cachetime);
-
+			if (is_array($key)) {
+				return apc_store($key, $cachetime);
+			}
+			return apc_store($params['key'], $params['data'], $cachetime);
 		};
 	}
 
 	/**
-	 * Read value(s) from the cache
+	 * Read value(s) from the cache.
 	 *
-	 * @param string $key        The key to uniquely identify the cached item
-	 * @return mixed Cached value if successful, false otherwise
+	 * This adapter method supports multi-key reads. By specifying `$key` as an
+	 * array of key names, this adapter will attempt to return an array of data
+	 * containing key/value pairs of the requested data.
+	 *
+	 * @param string|array $key The key to uniquely identify the cached item.
+	 * @return mixed Cached value if successful, false otherwise.
 	 */
 	public function read($key) {
 		return function($self, $params, $chain) {
-			extract($params);
-			$cachetime = intval(apc_fetch($key . '_expires'));
-			$time = time();
-			return ($cachetime < $time) ? false : apc_fetch($key);
+			return apc_fetch($params['key']);
 		};
 	}
 
 	/**
-	 * Delete value from the cache
+	 * Delete value from the cache.
 	 *
-	 * @param string $key        The key to uniquely identify the cached item
-	 * @return mixed True on successful delete, false otherwise
+	 * This adapter method supports multi-key deletes. By specifynig `$key` as an
+	 * array of key names, this adapter method will attempt to remove these keys
+	 * from the user space cache.
+	 *
+	 * @param string|array $key The key to uniquely identify the cached item.
+	 * @return mixed True on successful delete, false otherwise.
 	 */
 	public function delete($key) {
 		return function($self, $params, $chain) {
-			extract($params);
-			apc_delete($key . '_expires');
-			return apc_delete($key);
+			return apc_delete($params['key']);
 		};
 	}
 
@@ -116,8 +119,7 @@ class Apc extends \lithium\core\Object {
 	 */
 	public function decrement($key, $offset = 1) {
 		return function($self, $params, $chain) use ($offset) {
-			extract($params);
-			return apc_dec($key, $offset);
+			return apc_dec($params['key'], $offset);
 		};
 	}
 
@@ -134,8 +136,7 @@ class Apc extends \lithium\core\Object {
 	 */
 	public function increment($key, $offset = 1) {
 		return function($self, $params, $chain) use ($offset) {
-			extract($params);
-			return apc_inc($key, $offset);
+			return apc_inc($params['key'], $offset);
 		};
 	}
 
@@ -154,7 +155,7 @@ class Apc extends \lithium\core\Object {
 	 *
 	 * return boolean True if enabled, false otherwise
 	 */
-	public function enabled() {
+	public static function enabled() {
 		return (extension_loaded('apc') && apc_cache_info('user'));
 	}
 }

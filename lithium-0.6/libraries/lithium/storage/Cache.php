@@ -31,16 +31,17 @@ namespace lithium\storage;
  * ));}}}
  *
  * Each adapter provides a consistent interface for the basic cache operations of `write`, `read`,
- * `delete` and `clear`, which can be used interchangably between all adapters. Some adapters (e.g.
- * Memcached, Apc) provide additional methods that are not consistently available across
- * other adapters. To make use of these, it is always possible to call:
+ * `delete` and `clear`, which can be used interchangably between all adapters. Some adapters
+ * may provide additional methods that are not consistently available across other adapters.
+ * To make use of these, it is always possible to call:
  *
  * {{{Cache::adapter('named-configuration')->methodName($argument);}}}
  *
  * This allows a very wide range of flexibility, at the cost of portability.
  *
- * For more information on `Cache` methods and specific adapters, please see their relevant
- * documentation.
+ * Some cache adapters (e.g. File) do *not* provide the functionality for increment/decrement.
+ * Additionally, some cache adapters support multi-key operations for `write`, `read` and `delete`-
+ * Please see the individual documentation for cache adapters and the operations that they support.
  *
  * @see lithium\core\Adaptable
  * @see lithium\storage\cache\adapter
@@ -54,6 +55,11 @@ class Cache extends \lithium\core\Adaptable {
 	 */
 	protected static $_configurations = null;
 
+	/**
+	 * Libraries::locate() compatible path to adapters for this class.
+	 *
+	 * @var string Dot-delimited path.
+	 */
 	protected static $_adapters = 'adapter.storage.cache';
 
 	/**
@@ -75,11 +81,11 @@ class Cache extends \lithium\core\Adaptable {
 	 * @param string $name Configuration to be used for writing
 	 * @param mixed $key Key to uniquely identify the cache entry
 	 * @param mixed $data Data to be cached
-	 * @param mixed $expiry
+	 * @param string $expiry A strtotime() compatible cache time
 	 * @param mixed $conditions Conditions for the write operation to proceed
 	 * @return boolean True on successful cache write, false otherwise
 	 */
-	public static function write($name, $key, $data, $expiry, $conditions = null) {
+	public static function write($name, $key, $data, $expiry = null, $conditions = null) {
 		$settings = static::config();
 
 		if (!isset($settings[$name])) {
@@ -89,8 +95,12 @@ class Cache extends \lithium\core\Adaptable {
 		if (is_callable($conditions) && !$conditions()) {
 			return false;
 		}
-
 		$key = static::key($key);
+
+		if (is_array($key)) {
+			$expiry = $data;
+			$data = null;
+		}
 		$method = static::adapter($name)->write($key, $data, $expiry);
 		$params = compact('key', 'data', 'expiry');
 		return static::_filter(__FUNCTION__, $params, $method, $settings[$name]['filters']);
@@ -115,7 +125,6 @@ class Cache extends \lithium\core\Adaptable {
 		if (is_callable($conditions) && !$conditions()) {
 			return false;
 		}
-
 		$key = static::key($key);
 		$method = static::adapter($name)->read($key);
 		$params = compact('key');

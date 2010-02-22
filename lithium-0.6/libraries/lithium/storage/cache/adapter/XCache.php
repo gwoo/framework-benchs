@@ -36,17 +36,10 @@ namespace lithium\storage\cache\adapter;
  * and `clear` cache functionality, as well as allowing the first four
  * methods to be filtered as per the Lithium filtering system.
  *
- * This adapter defines several methods that are _not_ implemented in other
- * adapters, and are thus non-portable - see the documentation for `Cache`
- * as to how these methods should be accessed.
- *
- * This adapter stores two keys for each written value - one which consists
- * of the data to be cached, and the other being a cache of the expiration time.
- * This is to unify the behavior of the XCache adapter to be in line with the other
- * adapters, since XCache cache expirations are only evaluated on requests subsequent
- * to their initial storage.
+ * This adapter does *not* allow multi-key operations for any methods.
  *
  * @see lithium\storage\Cache::key()
+ * @see lithium\storage\cache\adapter
  */
 class XCache extends \lithium\core\Object {
 
@@ -71,13 +64,7 @@ class XCache extends \lithium\core\Object {
 	 */
 	public function write($key, $data, $expiry) {
 		return function($self, $params, $chain) {
-			extract($params);
-			$cachetime = strtotime($expiry);
-			$duration = $cachetime - time();
-
-			xcache_set($key . '_expires', $cachetime, $duration);
-			return xcache_set($key, $data, $cachetime);
-
+			return xcache_set($params['key'], $params['data'], strtotime($params['expiry']));
 		};
 	}
 
@@ -89,10 +76,7 @@ class XCache extends \lithium\core\Object {
 	 */
 	public function read($key) {
 		return function($self, $params, $chain) {
-			extract($params);
-			$cachetime = intval(xcache_get($key . '_expires'));
-			$time = time();
-			return ($cachetime < $time) ? false : xcache_get($key);
+			return xcache_get($params['key']);
 		};
 	}
 
@@ -104,9 +88,7 @@ class XCache extends \lithium\core\Object {
 	 */
 	public function delete($key) {
 		return function($self, $params, $chain) {
-			extract($params);
-			xcache_unset($key . '_expires');
-			return xcache_unset($key);
+			return xcache_unset($params['key']);
 		};
 	}
 
@@ -123,8 +105,7 @@ class XCache extends \lithium\core\Object {
 	 */
 	public function decrement($key, $offset = 1) {
 		return function($self, $params, $chain) use ($offset) {
-			extract($params);
-			return xcache_dec($key, $offset);
+			return xcache_dec($params['key'], $offset);
 		};
 	}
 
@@ -141,7 +122,7 @@ class XCache extends \lithium\core\Object {
 	public function increment($key, $offset = 1) {
 		return function($self, $params, $chain) use ($offset) {
 			extract($params);
-			return xcache_inc($key, $offset);
+			return xcache_inc($params['key'], $offset);
 		};
 	}
 
@@ -196,7 +177,7 @@ class XCache extends \lithium\core\Object {
 	 *
 	 * return boolean True if enabled, false otherwise
 	 */
-	public function enabled() {
+	public static function enabled() {
 		return (extension_loaded('xcache') && function_exists('xcache_info'));
 	}
 }

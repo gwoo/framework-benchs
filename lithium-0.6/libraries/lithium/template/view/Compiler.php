@@ -28,8 +28,8 @@ class Compiler extends \lithium\core\StaticObject {
 	/**
 	 * Compiles a template and writes it to a cache file, which is used for inclusion.
 	 *
-	 * @param string $file The full 
-	 * @param string $options 
+	 * @param string $file The full
+	 * @param string $options
 	 * @return void
 	 */
 	public static function template($file, $options = array()) {
@@ -44,7 +44,8 @@ class Compiler extends \lithium\core\StaticObject {
 
 		if (!file_exists($template)) {
 			$compiled = static::compile(file_get_contents($file));
-			$success = (file_put_contents($template, $compiled) !== false);
+			$success = $options['fallback'] && !is_writable(dirname($template))
+				? false : (file_put_contents($template, $compiled) !== false);
 
 			if (!$success && $options['fallback']) {
 				return $file;

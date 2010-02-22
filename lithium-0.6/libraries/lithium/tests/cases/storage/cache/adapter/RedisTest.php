@@ -42,7 +42,8 @@ class RedisTest extends \lithium\test\Unit {
 	}
 
 	public function testEnabled() {
-		$this->assertTrue($this->Redis->enabled());
+		$redis = $this->Redis;
+		$this->assertTrue($redis::enabled());
 	}
 
 	public function testSimpleWrite() {
@@ -204,26 +205,6 @@ class RedisTest extends \lithium\test\Unit {
 		$this->assertTrue($result);
 
 		$this->assertFalse($this->_Redis->get($key));
-	}
-
-	public function testExpiredRead() {
-		$key = 'expiring_read_key';
-		$data = 'expired data';
-		$time = 1;
-
-		$result = $this->_Redis->set($key, $data);
-		$this->assertTrue($result);
-
-		$result = $this->_Redis->setTimeout($key, $time);
-		$this->assertTrue($result);
-
-		sleep($time + 1);
-		$closure = $this->Redis->read($key);
-		$this->assertTrue(is_callable($closure));
-
-		$params = compact('key');
-		$result = $closure($this->Redis, $params, null);
-		$this->assertFalse($result);
 	}
 
 	public function testClear() {

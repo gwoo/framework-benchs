@@ -36,13 +36,9 @@ use \lithium\util\Set;
  *
  * This Memcache adapter provides basic support for `write`, `read`, `delete`
  * and `clear` cache functionality, as well as allowing the first four
- * methods to be filtered as per the Lithium filtering system. Additionally,
- * This adapter defines several methods that are _not_ implemented in other
- * adapters, and are thus non-portable - see the documentation for `Cache`
- * as to how these methods should be accessed.
+ * methods to be filtered as per the Lithium filtering system.
  *
- * This adapter stores two keys for each written value - one which consists
- * of the data to be cached, and the other being a cache of the expiration time.
+ * This adapter supports multi-key `write` and `read` operations.
  *
  * @see lithium\storage\Cache::key()
  * @see lithium\storage\Cache::adapter()
@@ -55,16 +51,16 @@ class Memcache extends \lithium\core\Object {
 	 *
 	 * @var object Memcache object
 	 */
-	protected static $_Memcached = null;
+	public static $connection = null;
 
 	/**
 	 * Object constructor.
 	 * Instantiates the Memcached object, adds appropriate servers to the pool,
 	 * and configures any optional settings passed.
 	 *
-	 * @param  array $config Configuration parameters for this cache adapter.
-	 *                       These settings are indexed by name and queryable
-	 *                       through `Cache::config('name')`.
+	 * @param array $config Configuration parameters for this cache adapter.
+	 *        These settings are indexed by name and queryable
+	 *        through `Cache::config('name')`.
 	 *
 	 * @return void
 	 * @see lithium\storage\Cache::config()
@@ -77,68 +73,76 @@ class Memcache extends \lithium\core\Object {
 			)
 		);
 
-		if (is_null(static::$_Memcached)) {
-			static::$_Memcached = new \Memcached();
+		if (is_null(static::$connection)) {
+			static::$connection = new \Memcached();
 		}
-
 		$configuration = Set::merge($defaults, $config);
 		parent::__construct($configuration);
 
-		static::$_Memcached->addServers($this->_config['servers']);
+		static::$connection->addServers($this->_config['servers']);
 	}
 
 	/**
-	 * Write value(s) to the cache
+	 * Write value(s) to the cache.
 	 *
-	 * @param string $key The key to uniquely identify the cached item
-	 * @param mixed $value The value to be cached
-	 * @param string $expiry A strtotime() compatible cache time
-	 * @return boolean True on successful write, false otherwise
+	 * This adapter method supports multi-key write. By specifying `$key` as an
+	 * associative array of key/value pairs, `$data` is ignored and all keys that
+	 * are cached will receive an expiration time of `$expiry`.
+	 *
+	 * @param string|array $key The key to uniquely identify the cached item.
+	 * @param mixed $value The value to be cached.
+	 * @param string $expiry A strtotime() compatible cache time.
+	 * @return boolean True on successful write, false otherwise.
 	 */
 	public function write($key, $value, $expiry) {
-		$Memcached =& static::$_Memcached;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Memcached) {
-			extract($params);
-			$expires = strtotime($expiry);
+		return function($self, $params, $chain) use (&$connection) {
+			$expires = strtotime($params['expiry']);
+			$key = $params['key'];
 
-			$Memcached->set($key . '_expires', $expires, $expires);
-			return $Memcached->set($key, $data, $expires);
-
+			if (is_array($key)) {
+				return $connection->setMulti($key, $expires);
+			}
+			return $connection->set($key, $params['data'], $expires);
 		};
 	}
 
 	/**
-	 * Read value(s) from the cache
+	 * Read value(s) from the cache.
 	 *
-	 * @param string $key        The key to uniquely identify the cached item
-	 * @return mixed Cached value if successful, false otherwise
-	 * @todo Refactor to use RES_NOTFOUND for return value checks
+	 * This adapter method supports multi-key reads. By specifying `$key` as an
+	 * array of key names, this adapter will attempt to return an array of data
+	 * containing key/value pairs of the requested data.
+	 *
+	 * @param string|array $key The key to uniquely identify the cached item.
+	 * @return mixed Cached value if successful, false otherwise.
+	 * @todo Refactor to use RES_NOTFOUND for return value checks.
 	 */
 	public function read($key) {
-		$Memcached =& static::$_Memcached;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Memcached) {
-			extract($params);
-			$cachetime = intval($Memcached->get($key . '_expires'));
-			$time = time();
-			return ($cachetime < $time) ? false : $Memcached->get($key);
+		return function($self, $params, $chain) use (&$connection) {
+			$key = $params['key'];
+
+			if (is_array($key)) {
+				return $connection->getMulti($key);
+			}
+			return $connection->get($key);
 		};
 	}
 
 	/**
-	 * Delete value from the cache
+	 * Delete value from the cache.
 	 *
-	 * @param string $key        The key to uniquely identify the cached item
-	 * @return mixed True on successful delete, false otherwise
+	 * @param string $key The key to uniquely identify the cached item.
+	 * @return mixed True on successful delete, false otherwise.
 	 */
 	public function delete($key) {
-		$Memcached =& static::$_Memcached;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Memcached) {
-			extract($params);
-			$Memcached->delete($key . '_expires');
-			return $Memcached->delete($key);
+		return function($self, $params, $chain) use (&$connection) {
+			return $connection->delete($params['key']);
 		};
 	}
 
@@ -155,11 +159,10 @@ class Memcache extends \lithium\core\Object {
 	 * @return mixed Item's new value on successful decrement, false otherwise
 	 */
 	public function decrement($key, $offset = 1) {
-		$Memcached =& static::$_Memcached;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Memcached, $offset) {
-			extract($params);
-			return $Memcached->decrement($key, $offset);
+		return function($self, $params, $chain) use (&$connection, $offset) {
+			return $connection->decrement($params['key'], $offset);
 		};
 	}
 
@@ -175,40 +178,34 @@ class Memcache extends \lithium\core\Object {
 	 * @return mixed Item's new value on successful increment, false otherwise
 	 */
 	public function increment($key, $offset = 1) {
-		$Memcached =& static::$_Memcached;
+		$connection =& static::$connection;
 
-		return function($self, $params, $chain) use (&$Memcached, $offset) {
-			extract($params);
-			return $Memcached->increment($key, $offset);
+		return function($self, $params, $chain) use (&$connection, $offset) {
+			return $connection->increment($params['key'], $offset);
 		};
 	}
 
 	/**
-	 * Clears user-space cache
+	 * Clears user-space cache.
 	 *
-	 * @return mixed True on successful clear, false otherwise
+	 * @return mixed True on successful clear, false otherwise.
 	 */
 	public function clear() {
-		return static::$_Memcached->flush();
+		return static::$connection->flush();
 	}
 
 	/**
-	 * Determines if the Memcached extension has been installed and
-	 * properly started.
+	 * Determines if the Memcached extension has been installed and properly started.
 	 *
-	 * @todo make this a bit smarter.
-	 * return boolean True if enabled, false otherwise
+	 * @return boolean Returns `true` if the Memcached extensions is installed and enabled, `false`
+	 *         otherwise.
 	 */
 	public function enabled() {
 		if (!extension_loaded('memcached')) {
 			return false;
 		}
-		$version = static::$_Memcached->getVersion();
-
-		if (empty($version)) {
-			return false;
-		}
-		return true;
+		$version = static::$connection->getVersion();
+		return (!empty($version));
 	}
 }
 

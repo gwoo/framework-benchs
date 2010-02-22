@@ -10,8 +10,13 @@ namespace lithium\tests\cases\storage;
 
 use \lithium\storage\Cache;
 use \lithium\util\Collection;
+use \SplFileInfo;
 
 class CacheTest extends \lithium\test\Unit {
+
+	public function setUp() {
+		Cache::reset();
+	}
 
 	public function tearDown() {
 		Cache::reset();
@@ -144,6 +149,46 @@ class CacheTest extends \lithium\test\Unit {
 
 		$result = Cache::write('non_existing', 'key_value', 'data', '+1 minute');
 		$this->assertFalse($result);
+	}
+
+	public function testCacheWriteMultipleItems() {
+		$config = array('default' => array(
+			'adapter' => 'Memory', 'filters' => array(), 'strategies' => array()
+		));
+		Cache::config($config);
+		$result = Cache::config();
+		$expected = $config;
+		$this->assertEqual($expected, $result);
+
+		$data = array(
+			'key1' => 'value1',
+			'key2' => 'value2',
+			'key3' => 'value3'
+		);
+		$result = Cache::write('default', $data, '+1 minute');
+		$this->assertTrue($result);
+	}
+
+	public function testCacheReadMultipleItems() {
+		$config = array('default' => array(
+			'adapter' => 'Memory', 'filters' => array(), 'strategies' => array()
+		));
+		Cache::config($config);
+		$result = Cache::config();
+		$expected = $config;
+		$this->assertEqual($expected, $result);
+
+		$data = array(
+			'read1' => 'value1',
+			'read2' => 'value2',
+			'read3' => 'value3'
+		);
+		$result = Cache::write('default', $data, '+1 minute');
+		$this->assertTrue($result);
+
+		$keys = array_keys($data);
+		$result = Cache::read('default', $keys);
+		$this->assertEqual($data, $result);
 	}
 
 	public function testCacheWriteWithConditions() {
@@ -397,6 +442,11 @@ class CacheTest extends \lithium\test\Unit {
 	}
 
 	public function testIntegrationFileAdapterWrite() {
+		$directory = new SplFileInfo(LITHIUM_APP_PATH . "/resources/tmp/cache/");
+		$accessible = ($directory->isDir() && $directory->isReadable() && $directory->isWritable());
+		$message = "$directory does not have the proper permissions.";
+		$this->skipIf(!$accessible, $message);
+
 		$config = array('default' => array(
 			'adapter' => 'File',
 			'path' => LITHIUM_APP_PATH . '/resources/tmp/cache',

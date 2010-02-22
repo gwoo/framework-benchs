@@ -19,6 +19,7 @@
 use \lithium\net\http\Router;
 use \lithium\core\Environment;
 use \lithium\action\Dispatcher;
+use \lithium\storage\Cache;
 
 /**
  * Loads application routes before the request is dispatched.  Change this to `include_once` if
@@ -27,7 +28,15 @@ use \lithium\action\Dispatcher;
  * @see lithium\net\http\Router
  */
 Dispatcher::applyFilter('run', function($self, $params, $chain) {
-	include __DIR__ . '/routes.php';
+	if ($cache = Cache::read('default', 'core.router')) {
+		$items = unserialize($cache);
+		Router::cache($items);
+	} else {
+		include __DIR__ . '/routes.php';
+		if ($cache != Router::cache()) {
+			Cache::write('default', 'core.router', serialize(Router::cache()), '+1 day');
+		}
+	}
 	return $chain->next($self, $params, $chain);
 });
 

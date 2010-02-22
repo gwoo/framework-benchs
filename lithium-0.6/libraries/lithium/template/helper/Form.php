@@ -16,8 +16,9 @@ use \lithium\util\Inflector;
  * will simply generate HTML forms and widgets, but by creating a form with a _binding object_,
  * the helper can pre-fill form input values, render error messages, and introspect column types.
  *
- * For example:
+ * For example, assuming you have created a `Post` model in your application:
  * {{{// In controller code:
+ * use \app\models\Post;
  * $post = Post::find(1);
  * return compact('post');
  *
@@ -47,8 +48,8 @@ class Form extends \lithium\template\Helper {
 		'form'                 => '<form action="{:url}"{:options}>',
 		'form-end'             => '</form>',
 		'hidden'               => '<input type="hidden" name="{:name}"{:options} />',
-		'input'                => '<div{:wrap}>{:label}{:input}{:error}</div>',
-		'input-checkbox'       => '<div{:wrap}>{:input}{:label}{:error}</div>',
+		'field'                => '<div{:wrap}>{:label}{:input}{:error}</div>',
+		'field-checkbox'       => '<div{:wrap}>{:input}{:label}{:error}</div>',
 		'label'                => '<label for="{:name}"{:options}>{:title}</label>',
 		'legend'               => '<legend>{:content}</legend>',
 		'option-group'         => '<optgroup label="{:label}"{:options}>',
@@ -166,6 +167,8 @@ class Form extends \lithium\template\Helper {
 	 * define your own custom objects as well. For more information on custom data objects, see
 	 * `lithium\template\helper\Form::$_binding`.
 	 *
+	 * @see lithium\template\helper\Form::$_binding
+	 * @see lithium\data\model\Record
 	 * @param object $binding
 	 * @param array $options
 	 * @return string Returns a `<form />` open tag with the `action` attribute defined by either
@@ -175,9 +178,9 @@ class Form extends \lithium\template\Helper {
 	 */
 	public function create($binding = null, $options = array()) {
 		$defaults = array(
-			'url' => null,
+			'url' => $this->_context->request()->params,
 			'type' => null,
-			'action' => $this->_context->request()->params['action'],
+			'action' => null,
 			'method' => $binding ? ($binding->exists() ? 'put' : 'post') : 'post'
 		);
 		list(, $options, $template) = $this->_defaults(__FUNCTION__, null, $options);
@@ -204,7 +207,7 @@ class Form extends \lithium\template\Helper {
 				));
 			}
 
-			$url = $options['url'] ?: array('action' => $options['action']);
+			$url = $options['action'] ? array('action' => $options['action']) : $options['url'];
 			unset($options['url'], $options['action']);
 			$options['method'] = strtoupper($options['method']);
 
@@ -232,6 +235,52 @@ class Form extends \lithium\template\Helper {
 	}
 
 	/**
+	 * Generates a form field with a label, input, and error message (if applicable), all contained
+	 * within a wrapping element.
+	 *
+	 * @param string $name The name of the field to render. If the form was bound to an object
+	 *               passed in `create()`, `$name` should be the field name of a
+	 * @param array $options Rendering options for the form field.
+	 * @return string Returns a form input (the input type is based on the `'type'` option), with
+	 *         label and error message, wrapped in a `<div />` element.
+	 */
+	public function field($name, $options = array()) {
+		$defaults = array(
+			'label' => null, 'type' => 'text',
+			'template' => 'field', 'wrap' => null,
+			'list' => null
+		);
+		$options += $defaults;
+		$wrap = $options['wrap'];
+		$type = $options['type'];
+
+		$label = $input = $error = null;
+
+		if ($options['label'] === null || !empty($options['label'])) {
+			$label = $this->label($name, $options['label']);
+		}
+		$fieldOptions = array_diff_key($options, $defaults);
+
+		switch (true) {
+			case ($type == 'select'):
+				$input = $this->select($name, $options['list'], $fieldOptions);
+			break;
+			case (method_exists($this, $type)):
+				$input = $this->{$type}($name, $fieldOptions);
+			break;
+		}
+
+		if ($this->_binding) {
+			$error = $this->error($name);
+		}
+		return $this->_render(
+			__METHOD__,
+			$options['template'],
+			compact('wrap', 'label', 'input', 'error')
+		);
+	}
+
+	/**
 	 * Generates an HTML `<input type="submit" />` object.
 	 *
 	 * @param string $title The title of the submit button.
@@ -243,6 +292,13 @@ class Form extends \lithium\template\Helper {
 		return $this->_render(__METHOD__, $template, compact('title', 'options'));
 	}
 
+	/**
+	 * Generates an HTML `<textarea></textarea>` object.
+	 *
+	 * @param string $name The name of the field.
+	 * @param array $options
+	 * @return string Returns a `<textarea>` tag with the given name and HTML attributes.
+	 */
 	public function textarea($name, $options = array()) {
 		list($name, $options, $template) = $this->_defaults(__FUNCTION__, $name, $options);
 		$value = isset($options['value']) ? $options['value'] : '';
@@ -250,6 +306,13 @@ class Form extends \lithium\template\Helper {
 		return $this->_render(__METHOD__, $template, compact('name', 'options', 'value'));
 	}
 
+	/**
+	 * Generates an HTML `<input type="text" />` object.
+	 *
+	 * @param string $name The name of the field.
+	 * @param array $options
+	 * @return string Returns a `<input />` tag with the given name and HTML attributes.
+	 */
 	public function text($name, $options = array()) {
 		list($name, $options, $template) = $this->_defaults(__FUNCTION__, $name, $options);
 		return $this->_render(__METHOD__, $template, compact('name', 'options'));
@@ -307,6 +370,13 @@ class Form extends \lithium\template\Helper {
 		return $output . $this->_context->strings('select-end');
 	}
 
+	/**
+	 * Generates an HTML `<input type="checkbox" />` object.
+	 *
+	 * @param string $name The name of the field.
+	 * @param array $options
+	 * @return string Returns a `<input />` tag with the given name and HTML attributes.
+	 */
 	public function checkbox($name, $options = array()) {
 		list($name, $options, $template) = $this->_defaults(__FUNCTION__, $name, $options);
 
@@ -317,34 +387,82 @@ class Form extends \lithium\template\Helper {
 		return $this->_render(__METHOD__, $template, compact('name', 'options'));
 	}
 
+	/**
+	 * Generates an HTML `<input type="password" />` object.
+	 *
+	 * @param string $name The name of the field.
+	 * @param array $options
+	 * @return string Returns a `<input />` tag with the given name and HTML attributes.
+	 */
 	public function password($name, $options = array()) {
 		list($name, $options, $template) = $this->_defaults(__FUNCTION__, $name, $options);
 		return $this->_render(__METHOD__, $template, compact('name', 'options'));
 	}
 
+	/**
+	 * Generates an HTML `<input type="hidden" />` object.
+	 *
+	 * @param string $name The name of the field.
+	 * @param array $options
+	 * @return string Returns a `<input />` tag with the given name and HTML attributes.
+	 */
 	public function hidden($name, $options = array()) {
 		list($name, $options, $template) = $this->_defaults(__FUNCTION__, $name, $options);
 		return $this->_render(__METHOD__, $template, compact('name', 'options'));
 	}
 
+	/**
+	 * Generates an HTML `<label></label>` object.
+	 *
+	 * @param string $name The name of the field that the label is for.
+	 * @param string $title The content inside the `<label></label>` object.
+	 * @param array $options
+	 * @return string Returns a `<label>` tag for the name and with HTML attributes.
+	 */
 	public function label($name, $title = null, $options = array()) {
 		$title = $title ?: Inflector::humanize($name);
 		list($name, $options, $template) = $this->_defaults(__FUNCTION__, $name, $options);
 		return $this->_render(__METHOD__, $template, compact('name', 'title', 'options'));
 	}
 
+	/**
+	 * Generates an error message for a field which is part of an object bound to a form in
+	 * `create()`.
+	 *
+	 * @param string $name The name of the field for which to render an error.
+	 * @param mixed $key If more than one error is present for `$name`, a key may be specified.
+	 *              By default, the first available error is used.
+	 * @param array $options Any rendering options or HTML attributes to be used when rendering
+	 *              the error.
+	 * @return string Returns a rendered error message based on the `'error'` string template.
+	 */
+	public function error($name, $key = null, $options = array()) {
+		list($name, $options, $template) = $this->_defaults(__FUNCTION__, $name, $options);
+
+		if (!$this->_binding || !$content = $this->_binding->errors($name)) {
+			return null;
+		}
+		if (is_array($content)) {
+			$content = !isset($content[$key]) ? reset($content) : $content[$key];
+		}
+		return $this->_render(__METHOD__, $template, compact('content', 'options'));
+	}
+
 	protected function _defaults($method, $name, $options) {
 		$methodConfig = isset($this->_config[$method]) ? $this->_config[$method] : array();
 		$options += $methodConfig + $this->_config['base'];
 
-		if ($name && $this->_binding && (!isset($options['value']) || empty($options['value']))) {
-			$options['value'] = $this->_binding->data($name);
+		$hasValue = (
+			(!isset($options['value']) || empty($options['value'])) &&
+			$name && $this->_binding && $value = $this->_binding->data($name)
+		);
+		if ($hasValue) {
+			$options['value'] = $value;
 		}
-
-		if (isset($options['default'])) {
-			$options['value'] = !empty($options['value']) ? $options['value'] : $options['default'];
-			unset($options['default']);
+		if (isset($options['default']) && empty($options['value'])) {
+			$options['value'] = $options['default'];
 		}
+		unset($options['default']);
 		$template = isset($this->_templateMap[$method]) ? $this->_templateMap[$method] : $method;
 		return array($name, $options, $template);
 	}

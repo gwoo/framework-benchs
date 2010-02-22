@@ -25,11 +25,17 @@ class MessageTest extends \lithium\test\Unit {
 		));
 		$data = function($n) { return $n == 1 ? 0 : 1; };
 		Catalog::write('message.plural', 'root', $data, array('name' => 'runtime'));
+
+		$this->_backups['environment'] = Environment::get('test');
+		Environment::set('test', array('locale' => 'en'));
+		Environment::set('test');
 	}
 
 	public function tearDown() {
 		Catalog::reset();
 		Catalog::config($this->_backups['catalogConfig']);
+
+		Environment::set('test', $this->_backups['environment']);
 	}
 
 	public function testTranslateBasic() {
@@ -165,13 +171,13 @@ class MessageTest extends \lithium\test\Unit {
 		$this->assertNull($result);
 	}
 
-	public function testShortHandsBasic() {
+	public function testAliasesBasic() {
 		$data = array(
 			'house' => array('Haus', 'Häuser')
 		);
 		Catalog::write('message', 'de', $data, array('name' => 'runtime'));
 
-		$filters = Message::shortHands();
+		$filters = Message::aliases();
 		$t = $filters['t'];
 		$tn = $filters['tn'];
 
@@ -188,13 +194,13 @@ class MessageTest extends \lithium\test\Unit {
 		$this->assertEqual($expected, $result);
 	}
 
-	public function testShortHandsSymmetry() {
+	public function testAliasesSymmetry() {
 		$data = array(
 			'house' => array('Haus', 'Häuser')
 		);
 		Catalog::write('message', 'de', $data, array('name' => 'runtime'));
 
-		$filters = Message::shortHands();
+		$filters = Message::aliases();
 		$t = $filters['t'];
 		$tn = $filters['tn'];
 
@@ -211,8 +217,8 @@ class MessageTest extends \lithium\test\Unit {
 		$this->assertEqual($expected, $result);
 	}
 
-	public function testShortHandsAsymmetry() {
-		$filters = Message::shortHands();
+	public function testAliasesAsymmetry() {
+		$filters = Message::aliases();
 		$t = $filters['t'];
 		$tn = $filters['tn'];
 

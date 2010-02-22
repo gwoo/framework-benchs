@@ -8,6 +8,10 @@ function fetch_target_list($file)
 {
     $line = 0;
     $handle = fopen($file, "r");
+	if (!is_resource($handle)) {
+		echo "{$file} not found";
+		return false;
+	}
     while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
         // skip blank lines
         $k = count($data);
@@ -45,7 +49,7 @@ function write_siege_file($vars = array())
         // file             => '',
         // url              => '',
         // 'delay'             => '1',
-        // timeout          => '',
+        'timeout'          => '30s',
         // expire-session   => '',
         // failures         => '',
         // 'internet'          => 'false',
@@ -78,7 +82,7 @@ function write_siege_file($vars = array())
     }
     
     // write the siegerc file
-    file_put_contents("/root/.siegerc", $text);
+    file_put_contents("/var/root/.siegerc", $text);
 }
 
 // store logs broken down by time
@@ -87,6 +91,10 @@ passthru("mkdir -p ./log/$time");
 
 // run each benchmark target
 $list = fetch_target_list($_SERVER['argv'][1]);
+if (!$list) {
+	echo $_SERVER['argv'][1];
+	exit(0);
+}
 foreach ($list as $key => $val) {
     
     $name = $val[0];
@@ -98,10 +106,11 @@ foreach ($list as $key => $val) {
     ));
     
     // restart the server for a fresh environment
-    passthru("/etc/init.d/apache2 restart");
+    //passthru("/etc/init.d/apache2 restart");
+	passthru("apachectl restart");
     
     // what href are we targeting?
-    $href = "http://localhost/$name/$path";
+    $href = "http://localhost/framework-benchs/$name/$path";
     
     // prime the cache
     echo "$name: prime the cache\n";
